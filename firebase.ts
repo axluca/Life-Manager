@@ -4,6 +4,9 @@ import {
   setPersistence,
   browserLocalPersistence,
   onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
 import {
   getFirestore,
@@ -510,6 +513,39 @@ export const signOut = async () => {
     await auth.signOut();
   } catch (error) {
     console.error('Error signing out:', error);
+    throw error;
+  }
+};
+
+// Google Sign-In
+export const signInWithGoogle = async () => {
+  try {
+    const provider = new GoogleAuthProvider();
+    // Set the OAuth client ID for Google
+    provider.setCustomParameters({
+      client_id: '213626612303-nv7jm4jc857e8n4cvffqmfq0c056qjkg.apps.googleusercontent.com'
+    });
+    // Request specific scopes
+    provider.addScope('profile');
+    provider.addScope('email');
+    
+    const result = await signInWithPopup(auth, provider);
+    console.log('[Firebase] Google sign-in successful:', result.user.uid);
+    return result.user;
+  } catch (error: any) {
+    console.error('[Firebase] Google sign-in error:', error);
+    throw error;
+  }
+};
+
+// Password Recovery
+export const sendPasswordReset = async (email: string) => {
+  try {
+    console.log('[Firebase] Sending password reset email to:', email);
+    await sendPasswordResetEmail(auth, email);
+    console.log('[Firebase] Password reset email sent successfully');
+  } catch (error: any) {
+    console.error('[Firebase] Password reset error:', error);
     throw error;
   }
 };
