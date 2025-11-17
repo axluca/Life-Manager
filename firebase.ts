@@ -5,6 +5,7 @@ import {
   browserLocalPersistence,
   onAuthStateChanged,
   GoogleAuthProvider,
+  OAuthProvider,
   signInWithPopup,
   sendPasswordResetEmail,
   RecaptchaVerifier,
@@ -538,6 +539,23 @@ export const signInWithGoogle = async () => {
     return result.user;
   } catch (error: any) {
     console.error('[Firebase] Google sign-in error:', error);
+    throw error;
+  }
+};
+
+// Apple Sign-In
+export const signInWithApple = async () => {
+  try {
+    const provider = new OAuthProvider('apple.com');
+    // Request specific scopes
+    provider.addScope('email');
+    provider.addScope('name');
+    
+    const result = await signInWithPopup(auth, provider);
+    console.log('[Firebase] Apple sign-in successful:', result.user.uid);
+    return result.user;
+  } catch (error: any) {
+    console.error('[Firebase] Apple sign-in error:', error);
     throw error;
   }
 };
