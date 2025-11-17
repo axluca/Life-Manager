@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
 import { Review } from '../types';
-import { apiFetch } from '../server';
 import { StarIcon } from './icons';
 
 interface AIPoweredInsightsProps {
   review: Review;
-  token: string;
   onInsightReceived: (insight: string, adjustment: string) => void;
   initialInsight: string | null;
   initialAdjustment: string | null;
@@ -13,7 +11,7 @@ interface AIPoweredInsightsProps {
 }
 
 const AIPoweredInsights: React.FC<AIPoweredInsightsProps> = ({ 
-    review, token, onInsightReceived, initialInsight, initialAdjustment, disabled = false
+    review, onInsightReceived, initialInsight, initialAdjustment, disabled = false
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,20 +22,41 @@ const AIPoweredInsights: React.FC<AIPoweredInsightsProps> = ({
     setIsLoading(true);
     setError(null);
     try {
-      const response = await apiFetch('/api/reviews/generate-insights', {
+      // Call the public Gemini API endpoint without auth
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error('Gemini API key not configured');
+      }
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          reviewId: review.id,
-          prompts: review.prompts,
-          goalIds: review.goalIds || [],
+          contents: [{
+            parts: [{
+              text: `Based on the following review responses, provide AI-powered insights and suggested adjustments:\n\nReview Prompts and Answers:\n${JSON.stringify(review.prompts, null, 2)}\n\nProvide your response in JSON format with "insight" and "adjustment" fields.`
+            }]
+          }]
         }),
       });
+      
       if (!response.ok) {
-        throw new Error('Failed to generate insights from the server.');
+        throw new Error('Failed to generate insights from Gemini API.');
       }
+      
       const data = await response.json();
-      onInsightReceived(data.insight, data.adjustment);
+      const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!textContent) {
+        throw new Error('No content received from Gemini API');
+      }
+      
+      try {
+        const parsed = JSON.parse(textContent);
+        onInsightReceived(parsed.insight || '', parsed.adjustment || '');
+      } catch {
+        // If not JSON, use the raw text
+        onInsightReceived(textContent, '');
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {

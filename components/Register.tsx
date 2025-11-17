@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { apiFetch } from '../server';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 
 interface RegisterProps {
-  onRegisterSuccess: (token: string) => void;
+  onRegisterSuccess: () => void;
 }
 
 const Register: React.FC<RegisterProps> = ({ onRegisterSuccess }) => {
@@ -21,26 +23,49 @@ const Register: React.FC<RegisterProps> = ({ onRegisterSuccess }) => {
         return;
     }
 
+    if (!name.trim()) {
+      setError('Please enter your full name.');
+      return;
+    }
+
     setIsLoading(true);
     
     try {
-       const response = await apiFetch('/api/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
+      // Create user account in Firebase Authentication
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Create user profile in Firestore
+      await setDoc(doc(db, 'users', user.uid), {
+        uid: user.uid,
+        name: name.trim(),
+        email: email.toLowerCase(),
+        createdAt: new Date().toISOString(),
+        subscriptionStatus: 'Free',
       });
-      const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.message || 'Registration failed');
-      }
-
-      onRegisterSuccess(data.token);
+      onRegisterSuccess();
 
     } catch (err: any) {
-        setError(err.message);
+      const errorMessage = getErrorMessage(err.code);
+      setError(errorMessage);
     } finally {
         setIsLoading(false);
+    }
+  };
+
+  const getErrorMessage = (errorCode: string): string => {
+    switch (errorCode) {
+      case 'auth/email-already-in-use':
+        return 'An account with this email address already exists.';
+      case 'auth/invalid-email':
+        return 'Please enter a valid email address.';
+      case 'auth/weak-password':
+        return 'Password is too weak. Please use a stronger password.';
+      case 'auth/operation-not-allowed':
+        return 'Account creation is currently disabled.';
+      default:
+        return 'Registration failed. Please try again.';
     }
   };
 

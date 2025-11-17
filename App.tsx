@@ -2,15 +2,21 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { User, TimeFormat, CalendarViewKey } from './types';
 import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
-import { apiFetch } from './server';
+import { subscribeToAuthState, fetchUserData } from './firebase';
 
 export type Theme = 'light' | 'dark';
+
+interface FirebaseUser {
+  uid: string;
+  email: string;
+  name: string;
+  subscriptionStatus: 'Free' | 'Premium';
+}
 
 const defaultVisibleViews: CalendarViewKey[] = ['year', 'month', 'week', 'day'];
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('authToken'));
+  const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [theme, setTheme] = useState<Theme>(() => {
     return (localStorage.getItem('theme') as Theme) || 'dark';
@@ -26,7 +32,6 @@ const App: React.FC = () => {
       return defaultVisibleViews;
     }
   });
-
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -45,7 +50,7 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('visibleCalendarViews', JSON.stringify(visibleCalendarViews));
   }, [visibleCalendarViews]);
-  
+
   const handleThemeChange = (newTheme: Theme) => {
     setTheme(newTheme);
   };
@@ -58,43 +63,27 @@ const App: React.FC = () => {
     setVisibleCalendarViews(newViews);
   };
 
-  const fetchUserData = useCallback(async (authToken: string) => {
-    try {
-      const response = await apiFetch('/api/me', {
-        headers: { 'Authorization': `Bearer ${authToken}` },
-      });
-      if (!response.ok) throw new Error('Failed to fetch user');
-      const userData: User = await response.json();
-      setUser(userData);
-    } catch (error) {
-      console.error("Session validation failed:", error);
-      localStorage.removeItem('authToken');
-      setToken(null);
-      setUser(null);
-    }
+  // Subscribe to Firebase auth state
+  useEffect(() => {
+    const unsubscribe = subscribeToAuthState((firebaseUser) => {
+      setUser(firebaseUser);
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
+  // Apply base styling to the body for theme transitions
   useEffect(() => {
-    // Apply base styling to the body for theme transitions
     document.body.className = 'bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-white transition-colors duration-300';
-    if (token) {
-      fetchUserData(token).finally(() => setIsLoading(false));
-    } else {
-      setIsLoading(false);
-    }
-  }, [token, fetchUserData]);
+  }, []);
 
-  const handleAuthSuccess = useCallback(async (newToken: string) => {
-    localStorage.setItem('authToken', newToken);
-    setToken(newToken);
-    setIsLoading(true);
-    await fetchUserData(newToken);
+  const handleAuthSuccess = useCallback(() => {
+    // Auth state will be automatically updated by the subscription
     setIsLoading(false);
-  }, [fetchUserData]);
+  }, []);
 
   const handleLogout = useCallback(() => {
-    localStorage.removeItem('authToken');
-    setToken(null);
     setUser(null);
   }, []);
 
@@ -106,7 +95,7 @@ const App: React.FC = () => {
     );
   }
 
-  if (!user || !token) {
+  if (!user) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 font-sans">
         <div className="w-full max-w-md mx-auto">
@@ -118,12 +107,16 @@ const App: React.FC = () => {
 
   return (
     <Dashboard 
-      user={user} 
-      token={token} 
-      onLogout={handleLogout} 
-      theme={theme} 
-      onThemeChange={handleThemeChange} 
-      timeFormat={timeFormat} 
+      user={{
+        name: user.name,
+        email: user.email,
+        subscriptionStatus: user.subscriptionStatus,
+      }}
+      userId={user.uid}
+      onLogout={handleLogout}
+      theme={theme}
+      onThemeChange={handleThemeChange}
+      timeFormat={timeFormat}
       onTimeFormatChange={handleTimeFormatChange}
       visibleCalendarViews={visibleCalendarViews}
       onVisibleCalendarViewsChange={handleVisibleCalendarViewsChange}

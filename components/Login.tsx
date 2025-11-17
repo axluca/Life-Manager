@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { apiFetch } from '../server';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../firebase';
 
 interface LoginProps {
-  onLoginSuccess: (token: string) => void;
+  onLoginSuccess: () => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
@@ -17,23 +18,30 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setIsLoading(true);
 
     try {
-      const response = await apiFetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Login failed');
-      }
-      
-      onLoginSuccess(data.token);
-
+      await signInWithEmailAndPassword(auth, email, password);
+      onLoginSuccess();
     } catch (err: any) {
-      setError(err.message);
+      const errorMessage = getErrorMessage(err.code);
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const getErrorMessage = (errorCode: string): string => {
+    switch (errorCode) {
+      case 'auth/user-not-found':
+        return 'No account found with this email address.';
+      case 'auth/wrong-password':
+        return 'Incorrect password. Please try again.';
+      case 'auth/invalid-email':
+        return 'Invalid email address.';
+      case 'auth/user-disabled':
+        return 'This account has been disabled.';
+      case 'auth/too-many-requests':
+        return 'Too many failed login attempts. Please try again later.';
+      default:
+        return 'Sign in failed. Please check your credentials and try again.';
     }
   };
 

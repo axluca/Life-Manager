@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Value, Goal, Project, Task, Review, Habit, IdealWeekBlock, TimeFormat, CalendarViewKey } from '../types';
-import { apiFetch } from '../server';
+import * as firebaseService from '../firebase';
 import Header from './Header';
 import Sidebar from './Sidebar';
 import ValueList from './ValueList';
@@ -19,7 +19,7 @@ type View = 'goals' | 'projects' | 'tasks' | 'habits' | 'calendar' | 'reviews' |
 
 interface DashboardProps {
   user: User;
-  token: string;
+  userId: string;
   onLogout: () => void;
   theme: 'light' | 'dark';
   onThemeChange: (theme: 'light' | 'dark') => void;
@@ -31,7 +31,7 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({
   user,
-  token,
+  userId,
   onLogout,
   theme,
   onThemeChange,
@@ -63,11 +63,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     setIsLoading(true);
     setError(null);
     try {
-      const response = await apiFetch('/api/dashboard', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (!response.ok) throw new Error('Failed to fetch dashboard data');
-      const data = await response.json();
+      const data = await firebaseService.fetchUserData(userId);
       setValues(data.values || []);
       setGoals(data.goals || []);
       setProjects(data.projects || []);
@@ -80,7 +76,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [token]);
+  }, [userId]);
 
   useEffect(() => {
     fetchData();
@@ -90,123 +86,210 @@ const Dashboard: React.FC<DashboardProps> = ({
   
   // Values
   const handleAddValue = async (text: string) => {
-    const res = await apiFetch('/api/values', { method: 'POST', body: JSON.stringify({ text }), headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }});
-    const newValue = await res.json();
-    setValues(prev => [...prev, newValue]);
+    try {
+      const newValue = await firebaseService.saveValue(userId, { text });
+      setValues(prev => [...prev, newValue]);
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
   const handleUpdateValue = async (id: string, text: string) => {
-    const res = await apiFetch(`/api/values/${id}`, { method: 'PUT', body: JSON.stringify({ text }), headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }});
-    const updatedValue = await res.json();
-    setValues(prev => prev.map(v => v.id === id ? updatedValue : v));
+    try {
+      await firebaseService.updateValue(id, { text });
+      setValues(prev => prev.map(v => v.id === id ? { ...v, text } : v));
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
   const handleDeleteValue = async (id: string) => {
-    await apiFetch(`/api/values/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }});
-    setValues(prev => prev.filter(v => v.id !== id));
+    try {
+      await firebaseService.deleteValue(id);
+      setValues(prev => prev.filter(v => v.id !== id));
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
 
   // Goals
   const handleAddGoal = async (goal: Omit<Goal, 'id' | 'order'>) => {
-    const res = await apiFetch('/api/goals', { method: 'POST', body: JSON.stringify(goal), headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }});
-    const newGoal = await res.json();
-    setGoals(prev => [...prev, newGoal]);
+    try {
+      const newGoal = await firebaseService.saveGoal(userId, goal);
+      setGoals(prev => [...prev, newGoal].sort((a, b) => a.order - b.order));
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
   const handleUpdateGoal = async (goal: Goal) => {
-    const res = await apiFetch(`/api/goals/${goal.id}`, { method: 'PUT', body: JSON.stringify(goal), headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }});
-    const updatedGoal = await res.json();
-    setGoals(prev => prev.map(g => g.id === goal.id ? updatedGoal : g));
+    try {
+      await firebaseService.updateGoal(goal.id, goal);
+      setGoals(prev => prev.map(g => g.id === goal.id ? goal : g));
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
   const handleDeleteGoal = async (id: string) => {
-    await apiFetch(`/api/goals/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }});
-    setGoals(prev => prev.filter(g => g.id !== id));
+    try {
+      await firebaseService.deleteGoal(id);
+      setGoals(prev => prev.filter(g => g.id !== id));
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
   const handleReorderGoals = async (reorderedGoals: Goal[]) => {
     setGoals(reorderedGoals); // Optimistic update
-    const orderedIds = reorderedGoals.map(g => g.id);
-    await apiFetch('/api/goals/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }), headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }});
+    try {
+      for (const goal of reorderedGoals) {
+        await firebaseService.updateGoal(goal.id, { order: goal.order });
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
 
   // Projects
   const handleAddProject = async (project: Omit<Project, 'id'>): Promise<Project> => {
-    const res = await apiFetch('/api/projects', { method: 'POST', body: JSON.stringify(project), headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }});
-    const newProject = await res.json();
-    setProjects(prev => [...prev, newProject]);
-    return newProject;
+    try {
+      const newProject = await firebaseService.saveProject(userId, project);
+      setProjects(prev => [...prev, newProject]);
+      return newProject;
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    }
   };
   const handleUpdateProject = async (project: Project) => {
-    const res = await apiFetch(`/api/projects/${project.id}`, { method: 'PUT', body: JSON.stringify(project), headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }});
-    const updatedProject = await res.json();
-    setProjects(prev => prev.map(p => p.id === project.id ? updatedProject : p));
+    try {
+      await firebaseService.updateProject(project.id, project);
+      setProjects(prev => prev.map(p => p.id === project.id ? project : p));
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
   const handleDeleteProject = async (id: string) => {
-    await apiFetch(`/api/projects/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }});
-    setProjects(prev => prev.filter(p => p.id !== id));
-    setTasks(prev => prev.filter(t => t.projectId !== id)); // Also remove tasks of deleted project
+    try {
+      await firebaseService.deleteProject(id);
+      setProjects(prev => prev.filter(p => p.id !== id));
+      setTasks(prev => prev.filter(t => t.projectId !== id)); // Also remove tasks of deleted project
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
 
   // Tasks
   const handleAddTask = async (task: Omit<Task, 'id'>) => {
-    const res = await apiFetch('/api/tasks', { method: 'POST', body: JSON.stringify(task), headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }});
-    const newTask = await res.json();
-    setTasks(prev => [...prev, newTask]);
+    try {
+      const newTask = await firebaseService.saveTask(userId, task);
+      setTasks(prev => [...prev, newTask]);
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
   const handleUpdateTask = async (task: Task) => {
-    const res = await apiFetch(`/api/tasks/${task.id}`, { method: 'PUT', body: JSON.stringify(task), headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }});
-    const updatedTask = await res.json();
-    setTasks(prev => prev.map(t => t.id === task.id ? updatedTask : t));
+    try {
+      await firebaseService.updateTask(task.id, task);
+      setTasks(prev => prev.map(t => t.id === task.id ? task : t));
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
   const handleDeleteTask = async (id: string) => {
-    await apiFetch(`/api/tasks/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }});
-    setTasks(prev => prev.filter(t => t.id !== id));
+    try {
+      await firebaseService.deleteTask(id);
+      setTasks(prev => prev.filter(t => t.id !== id));
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
 
   // Reviews
   const handleUpdateReview = async (review: Review): Promise<Review> => {
-    const res = await apiFetch(`/api/reviews/${review.id}`, { method: 'PUT', body: JSON.stringify(review), headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }});
-    const updatedReview = await res.json();
-    setReviews(prev => prev.map(r => r.id === review.id ? updatedReview : r));
-    return updatedReview;
+    try {
+      await firebaseService.updateReview(review.id, review);
+      setReviews(prev => prev.map(r => r.id === review.id ? review : r));
+      return review;
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    }
   };
 
   // Habits
   const handleAddHabit = async (habit: Omit<Habit, 'id' | 'order' | 'completedDates'>): Promise<Habit> => {
-      const res = await apiFetch('/api/habits', { method: 'POST', body: JSON.stringify(habit), headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } });
-      const newHabit = await res.json();
-      setHabits(prev => [...prev, newHabit].sort((a,b) => a.order - b.order));
+    try {
+      const newHabit = await firebaseService.saveHabit(userId, habit);
+      setHabits(prev => [...prev, newHabit].sort((a, b) => a.order - b.order));
       return newHabit;
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    }
   };
   const handleUpdateHabit = async (habit: Omit<Habit, 'completedDates' | 'order'>): Promise<Habit> => {
-      const res = await apiFetch(`/api/habits/${habit.id}`, { method: 'PUT', body: JSON.stringify(habit), headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } });
-      const updatedHabit = await res.json();
+    try {
+      const updatedHabit = { ...habit } as Habit;
+      await firebaseService.updateHabit(habit.id, updatedHabit);
       setHabits(prev => prev.map(h => h.id === habit.id ? updatedHabit : h));
       return updatedHabit;
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    }
   };
   const handleDeleteHabit = async (id: string) => {
-      await apiFetch(`/api/habits/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+    try {
+      await firebaseService.deleteHabit(id);
       setHabits(prev => prev.filter(h => h.id !== id));
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
   const handleToggleHabitDate = async (habitId: string, date: string) => {
-      const res = await apiFetch(`/api/habits/${habitId}/toggle`, { method: 'POST', body: JSON.stringify({ date }), headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } });
-      const { completedDates } = await res.json();
-      setHabits(prev => prev.map(h => h.id === habitId ? { ...h, completedDates } : h));
+    try {
+      const habit = habits.find(h => h.id === habitId);
+      if (!habit) return;
+      
+      const completedDates = habit.completedDates || [];
+      const dateIndex = completedDates.indexOf(date);
+      const updatedDates = dateIndex >= 0 
+        ? completedDates.filter((_, i) => i !== dateIndex)
+        : [...completedDates, date];
+      
+      await firebaseService.updateHabit(habitId, { completedDates: updatedDates });
+      setHabits(prev => prev.map(h => h.id === habitId ? { ...h, completedDates: updatedDates } : h));
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
   
   // Ideal Week Blocks
-    const handleAddIdealWeekBlock = async (block: Omit<IdealWeekBlock, 'id'>): Promise<IdealWeekBlock> => {
-        const res = await apiFetch('/api/ideal-week-blocks', { method: 'POST', body: JSON.stringify(block), headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }});
-        const newBlock = await res.json();
-        setIdealWeekBlocks(prev => [...prev, newBlock]);
-        return newBlock;
-    };
-    const handleUpdateIdealWeekBlock = async (block: IdealWeekBlock): Promise<IdealWeekBlock> => {
-        const res = await apiFetch(`/api/ideal-week-blocks/${block.id}`, { method: 'PUT', body: JSON.stringify(block), headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }});
-        const updatedBlock = await res.json();
-        setIdealWeekBlocks(prev => prev.map(b => b.id === block.id ? updatedBlock : b));
-        return updatedBlock;
-    };
-    const handleDeleteIdealWeekBlock = async (id: string) => {
-        await apiFetch(`/api/ideal-week-blocks/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }});
-        setIdealWeekBlocks(prev => prev.filter(b => b.id !== id));
-    };
+  const handleAddIdealWeekBlock = async (block: Omit<IdealWeekBlock, 'id'>): Promise<IdealWeekBlock> => {
+    try {
+      const newBlock = await firebaseService.saveIdealWeekBlock(userId, block);
+      setIdealWeekBlocks(prev => [...prev, newBlock]);
+      return newBlock;
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    }
+  };
+  const handleUpdateIdealWeekBlock = async (block: IdealWeekBlock): Promise<IdealWeekBlock> => {
+    try {
+      await firebaseService.updateIdealWeekBlock(block.id, block);
+      setIdealWeekBlocks(prev => prev.map(b => b.id === block.id ? block : b));
+      return block;
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    }
+  };
+  const handleDeleteIdealWeekBlock = async (id: string) => {
+    try {
+      await firebaseService.deleteIdealWeekBlock(id);
+      setIdealWeekBlocks(prev => prev.filter(b => b.id !== id));
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
 
 
   const renderView = () => {
@@ -258,7 +341,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             goals={goals} 
             onAddProject={handleAddProject} />;
       case 'reviews':
-        return <Reviews tasks={tasks} projects={projects} goals={goals} token={token} onUpdateReview={handleUpdateReview} setReviews={setReviews} />;
+        return <Reviews tasks={tasks} projects={projects} goals={goals} onUpdateReview={handleUpdateReview} setReviews={setReviews} />;
       case 'settings':
         return <Settings theme={theme} onThemeChange={onThemeChange} timeFormat={timeFormat} onTimeFormatChange={onTimeFormatChange} visibleCalendarViews={visibleCalendarViews} onVisibleCalendarViewsChange={onVisibleCalendarViewsChange} />;
       default:

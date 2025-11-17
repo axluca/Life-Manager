@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Review, ReviewCadence, Task, Project, Goal } from '../types';
 import ReviewFunnel from './ReviewFunnel';
 import AIPoweredInsights from './AIPoweredInsights';
-import { apiFetch } from '../server';
 import { ChevronLeftIcon, ChevronRightIcon, TargetIcon, PencilIcon } from './icons';
 import GoalLinkerModal from './GoalLinkerModal';
 
@@ -10,7 +9,6 @@ interface ReviewsProps {
     tasks: Task[];
     projects: Project[];
     goals: Goal[];
-    token: string;
     onUpdateReview: (review: Review) => Promise<Review>;
     setReviews: React.Dispatch<React.SetStateAction<Review[]>>;
 }
@@ -84,7 +82,7 @@ const getPeriodTitle = (cadence: ReviewCadence, date: Date): string => {
 };
 
 
-const Reviews: React.FC<ReviewsProps> = ({ tasks, projects, goals, token, onUpdateReview, setReviews }) => {
+const Reviews: React.FC<ReviewsProps> = ({ tasks, projects, goals, onUpdateReview, setReviews }) => {
     const [currentCadence, setCurrentCadence] = useState<ReviewCadence>('Daily');
     const [currentDate, setCurrentDate] = useState(new Date());
     const [currentReview, setCurrentReview] = useState<Review | null>(null);
@@ -98,13 +96,18 @@ const Reviews: React.FC<ReviewsProps> = ({ tasks, projects, goals, token, onUpda
         setError(null);
         const period = getPeriodId(cadence, date);
         try {
-            const response = await apiFetch('/api/reviews/find-or-create', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cadence, period }),
-            });
-            if (!response.ok) throw new Error('Failed to fetch or create review.');
-            const reviewData = await response.json();
+            // Create a new review object for this period
+            const reviewData: Review = {
+                id: `${cadence}-${period}`,
+                cadence,
+                period,
+                prompts: {},
+                aiInsight: '',
+                aiAdjustment: '',
+                isCompleted: false,
+                completedAt: null,
+                linkedGoalIds: [],
+            };
             
             setReviews(prev => {
                 const exists = prev.some(r => r.id === reviewData.id);
@@ -117,7 +120,7 @@ const Reviews: React.FC<ReviewsProps> = ({ tasks, projects, goals, token, onUpda
         } finally {
             setIsLoading(false);
         }
-    }, [token, setReviews]);
+    }, [setReviews]);
 
     useEffect(() => {
         fetchReviewForPeriod(currentCadence, currentDate);
@@ -247,7 +250,6 @@ const Reviews: React.FC<ReviewsProps> = ({ tasks, projects, goals, token, onUpda
                     </div>
                     <AIPoweredInsights
                         review={currentReview}
-                        token={token}
                         onInsightReceived={handleInsightReceived}
                         initialInsight={currentReview.aiInsight}
                         initialAdjustment={currentReview.aiAdjustment}

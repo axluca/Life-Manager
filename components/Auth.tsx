@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import Login from './Login';
 import Register from './Register';
-import { apiFetch } from '../server';
 
 interface AuthProps {
-  onAuthSuccess: (token: string) => void;
+  onAuthSuccess: () => void;
 }
 
 // Set to `false` or remove the button entirely for production
@@ -12,29 +11,6 @@ const isDevelopment = true;
 
 const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
   const [isLoginView, setIsLoginView] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleTestLogin = async () => {
-    setIsLoading(true);
-    setError('');
-    try {
-      const response = await apiFetch('/api/test-login', {
-        method: 'POST'
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Test login failed');
-      }
-      
-      onAuthSuccess(data.token);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <div>
@@ -48,6 +24,33 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
         <button
           onClick={() => setIsLoginView(!isLoginView)}
           className="ml-2 font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-800 focus:ring-indigo-500 rounded"
+        >
+          {isLoginView ? 'Sign Up' : 'Sign In'}
+        </button>
+      </p>
+
+      {isDevelopment && (
+         <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                <div className="w-full border-t border-gray-300 dark:border-slate-600" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="bg-gray-50 dark:bg-slate-900 px-2 text-slate-500">{`For Testing`}</span>
+              </div>
+            </div>
+            <div className="mt-4">
+              <p className="text-xs text-center text-slate-500 dark:text-slate-400 mb-3">
+                Test credentials: test@example.com / Test@123
+              </p>
+            </div>
+          </div>
+      )}
+    </div>
+  );
+};
+
+export default Auth;
         >
           {isLoginView ? 'Sign Up' : 'Sign In'}
         </button>
