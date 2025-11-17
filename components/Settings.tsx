@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Theme } from '../App';
 import { TimeFormat, CalendarViewKey } from '../types';
+import TwoFactorModal from './TwoFactorModal';
 
 interface SettingsProps {
   theme: Theme;
@@ -9,6 +10,9 @@ interface SettingsProps {
   onTimeFormatChange: (format: TimeFormat) => void;
   visibleCalendarViews: CalendarViewKey[];
   onVisibleCalendarViewsChange: (views: CalendarViewKey[]) => void;
+  userId?: string;
+  userTwoFactorEnabled?: boolean;
+  userPhoneNumber?: string;
 }
 
 const allCalendarViews: { key: CalendarViewKey; label: string }[] = [
@@ -22,8 +26,12 @@ const allCalendarViews: { key: CalendarViewKey; label: string }[] = [
 const Settings: React.FC<SettingsProps> = ({ 
   theme, onThemeChange, 
   timeFormat, onTimeFormatChange,
-  visibleCalendarViews, onVisibleCalendarViewsChange
+  visibleCalendarViews, onVisibleCalendarViewsChange,
+  userId = '',
+  userTwoFactorEnabled = false,
+  userPhoneNumber = '',
 }) => {
+  const [show2FAModal, setShow2FAModal] = useState(false);
 
   const toggleTheme = () => {
     onThemeChange(theme === 'dark' ? 'light' : 'dark');
@@ -130,6 +138,41 @@ const Settings: React.FC<SettingsProps> = ({
                    <p className="text-xs text-slate-500 mt-3">At least the 'Day' or 'Week' view must be active to ensure calendar functionality.</p>
               </div>
             </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800/60 backdrop-blur-sm border border-gray-200 dark:border-slate-700 rounded-2xl shadow-lg p-6">
+            <h2 className="text-xl font-bold">Security</h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 mb-6">Manage your account security settings.</p>
+            
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-gray-100 dark:bg-slate-700/50 rounded-lg">
+                  <div>
+                      <h3 className="font-semibold text-slate-800 dark:text-slate-200">Two-Factor Authentication</h3>
+                      <p className="text-sm text-slate-600 dark:text-slate-400">
+                        {userTwoFactorEnabled ? 'Enabled via SMS' : 'Add an extra layer of security'}
+                      </p>
+                  </div>
+                  <button
+                      onClick={() => setShow2FAModal(true)}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        userTwoFactorEnabled
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
+                          : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                      }`}
+                  >
+                    {userTwoFactorEnabled ? 'Manage' : 'Enable'}
+                  </button>
+              </div>
+            </div>
+
+            <TwoFactorModal
+              userId={userId}
+              isOpen={show2FAModal}
+              onClose={() => setShow2FAModal(false)}
+              twoFactorEnabled={userTwoFactorEnabled}
+              phoneNumber={userPhoneNumber}
+              onSuccess={() => window.location.reload()}
+            />
         </div>
     </div>
   );

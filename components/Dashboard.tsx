@@ -353,7 +353,17 @@ const Dashboard: React.FC<DashboardProps> = ({
       case 'reviews':
         return <Reviews tasks={tasks} projects={projects} goals={goals} onUpdateReview={handleUpdateReview} setReviews={setReviews} />;
       case 'settings':
-        return <Settings theme={theme} onThemeChange={onThemeChange} timeFormat={timeFormat} onTimeFormatChange={onTimeFormatChange} visibleCalendarViews={visibleCalendarViews} onVisibleCalendarViewsChange={onVisibleCalendarViewsChange} />;
+        return <Settings 
+          theme={theme} 
+          onThemeChange={onThemeChange} 
+          timeFormat={timeFormat} 
+          onTimeFormatChange={onTimeFormatChange} 
+          visibleCalendarViews={visibleCalendarViews} 
+          onVisibleCalendarViewsChange={onVisibleCalendarViewsChange}
+          userId={userId}
+          userTwoFactorEnabled={user.twoFactorEnabled || false}
+          userPhoneNumber={user.phoneNumber || ''}
+        />;
       default:
         return <div>Select a view</div>;
     }

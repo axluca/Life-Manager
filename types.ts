@@ -6,6 +6,8 @@ export interface User {
   name: string;
   email: string;
   subscriptionStatus: 'Free' | 'Premium';
+  twoFactorEnabled?: boolean;
+  phoneNumber?: string;
 }
 
 export interface Value {

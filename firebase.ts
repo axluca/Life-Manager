@@ -7,6 +7,10 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   sendPasswordResetEmail,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  PhoneAuthProvider,
+  signInWithCredential,
 } from 'firebase/auth';
 import {
   getFirestore,
@@ -546,6 +550,98 @@ export const sendPasswordReset = async (email: string) => {
     console.log('[Firebase] Password reset email sent successfully');
   } catch (error: any) {
     console.error('[Firebase] Password reset error:', error);
+    throw error;
+  }
+};
+
+// Two-Factor Authentication (Phone-based)
+let verificationId: string | null = null;
+
+export const initializeRecaptcha = (containerId: string) => {
+  try {
+    const recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
+      size: 'invisible',
+      callback: (response: any) => {
+        console.log('[Firebase] reCAPTCHA callback:', response);
+      },
+      'expired-callback': () => {
+        console.log('[Firebase] reCAPTCHA expired');
+      },
+    });
+    return recaptchaVerifier;
+  } catch (error: any) {
+    console.error('[Firebase] reCAPTCHA initialization error:', error);
+    throw error;
+  }
+};
+
+export const sendPhoneVerificationCode = async (
+  phoneNumber: string,
+  recaptchaVerifier: RecaptchaVerifier
+): Promise<string> => {
+  try {
+    console.log('[Firebase] Sending phone verification code to:', phoneNumber);
+    const appVerifier = recaptchaVerifier;
+    const confirmationResult = await signInWithPhoneNumber(
+      auth,
+      phoneNumber,
+      appVerifier
+    );
+    // Store verificationId for later use
+    verificationId = confirmationResult.verificationId;
+    console.log('[Firebase] Verification code sent successfully');
+    return confirmationResult.verificationId;
+  } catch (error: any) {
+    console.error('[Firebase] Phone verification error:', error);
+    throw error;
+  }
+};
+
+export const verifyPhoneOTP = async (otp: string): Promise<any> => {
+  try {
+    if (!verificationId) {
+      throw new Error('Verification ID not found. Please request a code first.');
+    }
+    console.log('[Firebase] Verifying OTP...');
+    const credential = PhoneAuthProvider.credential(verificationId, otp);
+    const result = await signInWithCredential(auth, credential);
+    console.log('[Firebase] Phone verification successful:', result.user.uid);
+    verificationId = null; // Clear verification ID after use
+    return result.user;
+  } catch (error: any) {
+    console.error('[Firebase] OTP verification error:', error);
+    throw error;
+  }
+};
+
+export const enable2FA = async (userId: string, phoneNumber: string) => {
+  try {
+    console.log('[Firebase] Enabling 2FA for user:', userId);
+    const userDocRef = doc(db, 'users', userId);
+    await updateDoc(userDocRef, {
+      twoFactorEnabled: true,
+      phoneNumber: phoneNumber,
+      twoFactorUpdatedAt: new Date().toISOString(),
+    });
+    console.log('[Firebase] 2FA enabled successfully');
+  } catch (error: any) {
+    console.error('[Firebase] Enable 2FA error:', error);
+    throw error;
+  }
+};
+
+export const disable2FA = async (userId: string) => {
+  try {
+    console.log('[Firebase] Disabling 2FA for user:', userId);
+    const userDocRef = doc(db, 'users', userId);
+    await updateDoc(userDocRef, {
+      twoFactorEnabled: false,
+      phoneNumber: null,
+      twoFactorUpdatedAt: new Date().toISOString(),
+    });
+    console.log('[Firebase] 2FA disabled successfully');
+  } catch (error: any) {
+    console.error('[Firebase] Disable 2FA error:', error);
     throw error;
   }
 };
