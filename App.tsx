@@ -2,7 +2,8 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { User, TimeFormat, CalendarViewKey } from './types';
 import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
-import { subscribeToAuthState, fetchUserData } from './firebase';
+import { subscribeToAuthState, fetchUserData, signOut } from './firebase';
+import { testFirestoreConnection } from './firebaseDiagnostics';
 
 export type Theme = 'light' | 'dark';
 
@@ -65,12 +66,17 @@ const App: React.FC = () => {
 
   // Subscribe to Firebase auth state
   useEffect(() => {
+    console.log('[App] Setting up auth state subscription');
     const unsubscribe = subscribeToAuthState((firebaseUser) => {
+      console.log('[App] Auth state changed, user:', firebaseUser?.uid || 'none');
       setUser(firebaseUser);
       setIsLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      console.log('[App] Cleaning up auth state subscription');
+      unsubscribe();
+    };
   }, []);
 
   // Apply base styling to the body for theme transitions
@@ -80,11 +86,18 @@ const App: React.FC = () => {
 
   const handleAuthSuccess = useCallback(() => {
     // Auth state will be automatically updated by the subscription
+    console.log('[App] Auth success callback triggered');
     setIsLoading(false);
   }, []);
 
-  const handleLogout = useCallback(() => {
-    setUser(null);
+  const handleLogout = useCallback(async () => {
+    try {
+      await signOut();
+      setUser(null);
+    } catch (error) {
+      console.error('[App] Error signing out:', error);
+      setUser(null); // Clear user state even if signOut fails
+    }
   }, []);
 
   if (isLoading) {

@@ -1,0 +1,6 @@
+{
+  "firestore": {
+    "rules": "dbrules.rules",
+    "indexes": "firestore.indexes.json"
+  }
+}

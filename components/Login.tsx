@@ -19,11 +19,12 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      // Don't set isLoading to false here - let the parent component handle it
+      // The auth state subscription in App.tsx will trigger the callback when ready
       onLoginSuccess();
     } catch (err: any) {
       const errorMessage = getErrorMessage(err.code);
       setError(errorMessage);
-    } finally {
       setIsLoading(false);
     }
   };

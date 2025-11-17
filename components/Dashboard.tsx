@@ -72,7 +72,17 @@ const Dashboard: React.FC<DashboardProps> = ({
       setHabits(data.habits || []);
       setIdealWeekBlocks(data.idealWeekBlocks || []);
     } catch (err: any) {
-      setError(err.message);
+      console.error('[Dashboard] Error fetching user data:', err);
+      // Show error but allow the dashboard to render with empty data
+      setError('Could not load your data. Please check your internet connection. Data will sync when connection is restored.');
+      // Initialize with empty arrays so dashboard still works
+      setValues([]);
+      setGoals([]);
+      setProjects([]);
+      setTasks([]);
+      setReviews([]);
+      setHabits([]);
+      setIdealWeekBlocks([]);
     } finally {
       setIsLoading(false);
     }
@@ -113,9 +123,12 @@ const Dashboard: React.FC<DashboardProps> = ({
   // Goals
   const handleAddGoal = async (goal: Omit<Goal, 'id' | 'order'>) => {
     try {
+      console.log('[Dashboard] Adding goal:', goal);
       const newGoal = await firebaseService.saveGoal(userId, goal);
+      console.log('[Dashboard] Goal added successfully:', newGoal);
       setGoals(prev => [...prev, newGoal].sort((a, b) => a.order - b.order));
     } catch (err: any) {
+      console.error('[Dashboard] Error adding goal:', err);
       setError(err.message);
     }
   };
@@ -296,9 +309,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     if (isLoading) {
       return <div className="flex items-center justify-center h-full"><p>Loading your dashboard...</p></div>;
     }
-    if (error) {
-      return <div className="flex items-center justify-center h-full"><p className="text-red-500">Error: {error}</p></div>;
-    }
 
     switch (currentView) {
       case 'goals':
@@ -387,6 +397,19 @@ const Dashboard: React.FC<DashboardProps> = ({
                   </>
                 )}
               </div>
+            </div>
+          )}
+          {error && (
+            <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-start justify-between">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">{error}</p>
+              </div>
+              <button 
+                onClick={() => setError(null)}
+                className="ml-4 text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 dark:hover:text-yellow-300"
+              >
+                ✕
+              </button>
             </div>
           )}
           {renderView()}

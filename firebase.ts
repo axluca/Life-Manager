@@ -18,6 +18,7 @@ import {
   doc,
   writeBatch,
   QueryConstraint,
+  enableIndexedDbPersistence,
 } from 'firebase/firestore';
 
 // Firebase configuration - loaded from environment variables
@@ -38,8 +39,21 @@ export const db = getFirestore(app);
 
 // Set persistence to LOCAL (survive browser close)
 setPersistence(auth, browserLocalPersistence).catch((error) => {
-  console.error('Failed to set auth persistence:', error);
+  console.error('[Firebase] Failed to set auth persistence:', error);
 });
+
+// Enable offline persistence for Firestore
+try {
+  enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code === 'failed-precondition') {
+      console.warn('[Firebase] Multiple tabs open - offline persistence disabled');
+    } else if (err.code === 'unimplemented') {
+      console.warn('[Firebase] Browser does not support offline persistence');
+    }
+  });
+} catch (err) {
+  console.warn('[Firebase] Could not enable offline persistence:', err);
+}
 
 // --- TYPE DEFINITIONS ---
 import type { User, Value, Goal, Project, Task, Review, Habit, IdealWeekBlock, TaskStatus, TaskPriority, ReviewCadence, HabitFrequency } from './types';
@@ -63,16 +77,32 @@ export const getCurrentUser = (): Promise<FirebaseUser | null> => {
         return;
       }
       try {
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        if (userDoc.exists()) {
-          resolve({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email || '',
-            ...userDoc.data(),
-          } as FirebaseUser);
-        } else {
-          resolve(null);
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        let userDoc = await getDoc(userRef);
+        if (!userDoc.exists()) {
+          // Create user document if missing
+          try {
+            const newUser = {
+              uid: firebaseUser.uid,
+              name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+              email: firebaseUser.email || '',
+              createdAt: new Date().toISOString(),
+              subscriptionStatus: 'Free',
+            };
+            await setDoc(userRef, newUser);
+            userDoc = await getDoc(userRef);
+            console.log('[Firebase] Created missing Firestore user document:', newUser);
+          } catch (err) {
+            console.error('[Firebase] Failed to create Firestore user document:', err);
+            resolve(null);
+            return;
+          }
         }
+        resolve({
+          uid: firebaseUser.uid,
+          email: firebaseUser.email || '',
+          ...userDoc.data(),
+        } as FirebaseUser);
       } catch (error) {
         console.error('Error getting current user:', error);
         resolve(null);
@@ -82,56 +112,154 @@ export const getCurrentUser = (): Promise<FirebaseUser | null> => {
 };
 
 export const subscribeToAuthState = (callback: (user: FirebaseUser | null) => void) => {
+  
+  const fetchUserDocWithRetry = async (firebaseUser: any, maxAttempts = 3): Promise<FirebaseUser | null> => {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        console.log(`[Firebase] Fetching user data for user: ${firebaseUser.uid} (attempt ${attempt}/${maxAttempts})`);
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        let userDoc = await getDoc(userRef);
+        
+        if (!userDoc.exists()) {
+          // Create user document if missing
+          try {
+            const newUser = {
+              uid: firebaseUser.uid,
+              name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+              email: firebaseUser.email || '',
+              createdAt: new Date().toISOString(),
+              subscriptionStatus: 'Free',
+            };
+            console.log('[Firebase] Creating new user document:', newUser);
+            await setDoc(userRef, newUser);
+            userDoc = await getDoc(userRef);
+            console.log('[Firebase] Created missing Firestore user document:', newUser);
+          } catch (err) {
+            console.error('[Firebase] Failed to create Firestore user document:', err);
+            throw err;
+          }
+        }
+        
+        const userData = userDoc.data();
+        console.log('[Firebase] User data retrieved:', userData);
+        
+        const firebaseUserData: FirebaseUser = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email || '',
+          name: userData?.name || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+          subscriptionStatus: userData?.subscriptionStatus || 'Free',
+        };
+        
+        console.log('[Firebase] Successfully fetched user data:', firebaseUserData);
+        return firebaseUserData;
+      } catch (error: any) {
+        console.warn(`[Firebase] Attempt ${attempt}/${maxAttempts} failed:`, error.message);
+        
+        // If this is the last attempt or error is not network-related, give up
+        if (attempt === maxAttempts || (error.code !== 'unavailable' && !error.message?.includes('offline'))) {
+          console.error('[Firebase] Failed to fetch user document:', error);
+          return null;
+        }
+        
+        // Wait before retrying (exponential backoff)
+        const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        console.log(`[Firebase] Retrying in ${delayMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+    
+    return null;
+  };
+  
   return onAuthStateChanged(auth, async (firebaseUser) => {
     if (!firebaseUser) {
+      console.log('[Firebase] User signed out');
       callback(null);
       return;
     }
+    
+    console.log('[Firebase] Auth state changed for user:', firebaseUser.uid);
+    
     try {
-      const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-      if (userDoc.exists()) {
-        callback({
+      // Try to fetch user data, but don't block on failure
+      const userData = await fetchUserDocWithRetry(firebaseUser);
+      
+      if (userData) {
+        console.log('[Firebase] Calling callback with complete user data:', userData);
+        callback(userData);
+      } else {
+        // Firestore is offline/unavailable, but auth succeeded
+        // Create a minimal user object to allow sign-in to proceed
+        console.warn('[Firebase] Could not fetch user data from Firestore, using minimal user object');
+        const minimalUser: FirebaseUser = {
           uid: firebaseUser.uid,
           email: firebaseUser.email || '',
-          ...userDoc.data(),
-        } as FirebaseUser);
-      } else {
-        callback(null);
+          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+          subscriptionStatus: 'Free',
+        };
+        callback(minimalUser);
       }
     } catch (error) {
-      console.error('Error in auth state subscription:', error);
-      callback(null);
+      console.error('[Firebase] Unexpected error in auth state subscription:', error);
+      // Even on error, allow sign-in with minimal user data
+      const minimalUser: FirebaseUser = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email || '',
+        name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+        subscriptionStatus: 'Free',
+      };
+      callback(minimalUser);
     }
   });
 };
 
 // --- DATA FETCHING FUNCTIONS ---
 
-export const fetchUserData = async (userId: string) => {
-  try {
-    const [valuesSnap, goalsSnap, projectsSnap, tasksSnap, reviewsSnap, habitsSnap, blocksSnap] = await Promise.all([
-      getDocs(query(collection(db, 'values'), where('userId', '==', userId))),
-      getDocs(query(collection(db, 'goals'), where('userId', '==', userId))),
-      getDocs(query(collection(db, 'projects'), where('userId', '==', userId))),
-      getDocs(query(collection(db, 'tasks'), where('userId', '==', userId))),
-      getDocs(query(collection(db, 'reviews'), where('userId', '==', userId))),
-      getDocs(query(collection(db, 'habits'), where('userId', '==', userId))),
-      getDocs(query(collection(db, 'idealWeekBlocks'), where('userId', '==', userId))),
-    ]);
+export const fetchUserData = async (userId: string, maxAttempts = 3) => {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.log(`[Firebase] Fetching user data for ${userId} (attempt ${attempt}/${maxAttempts})`);
+      
+      const [valuesSnap, goalsSnap, projectsSnap, tasksSnap, reviewsSnap, habitsSnap, blocksSnap] = await Promise.all([
+        getDocs(query(collection(db, 'values'), where('userId', '==', userId))),
+        getDocs(query(collection(db, 'goals'), where('userId', '==', userId))),
+        getDocs(query(collection(db, 'projects'), where('userId', '==', userId))),
+        getDocs(query(collection(db, 'tasks'), where('userId', '==', userId))),
+        getDocs(query(collection(db, 'reviews'), where('userId', '==', userId))),
+        getDocs(query(collection(db, 'habits'), where('userId', '==', userId))),
+        getDocs(query(collection(db, 'idealWeekBlocks'), where('userId', '==', userId))),
+      ]);
 
-    return {
-      values: valuesSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Value & { userId: string })),
-      goals: goalsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Goal & { userId: string })),
-      projects: projectsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Project & { userId: string })),
-      tasks: tasksSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Task & { userId: string })),
-      reviews: reviewsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Review & { userId: string })),
-      habits: habitsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Habit & { userId: string })),
-      idealWeekBlocks: blocksSnap.docs.map((d) => ({ id: d.id, ...d.data() } as IdealWeekBlock & { userId: string })),
-    };
-  } catch (error) {
-    console.error('Error fetching user data:', error);
-    throw error;
+      console.log('[Firebase] User data fetched successfully');
+      
+      return {
+        values: valuesSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Value & { userId: string })),
+        goals: goalsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Goal & { userId: string })),
+        projects: projectsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Project & { userId: string })),
+        tasks: tasksSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Task & { userId: string })),
+        reviews: reviewsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Review & { userId: string })),
+        habits: habitsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Habit & { userId: string })),
+        idealWeekBlocks: blocksSnap.docs.map((d) => ({ id: d.id, ...d.data() } as IdealWeekBlock & { userId: string })),
+      };
+    } catch (error: any) {
+      console.warn(`[Firebase] Attempt ${attempt}/${maxAttempts} failed:`, error.message);
+      
+      // If offline/unavailable, try retry on earlier attempts
+      const isNetworkError = error.code === 'unavailable' || error.message?.includes('offline') || error.message?.includes('permission');
+      
+      if (attempt === maxAttempts || !isNetworkError) {
+        console.error('[Firebase] Error fetching user data:', error.message);
+        throw new Error(`Failed to load data: ${error.message}`);
+      }
+      
+      // Wait before retrying (exponential backoff)
+      const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+      console.log(`[Firebase] Retrying in ${delayMs}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
   }
+  
+  throw new Error('Failed to fetch user data after all retries');
 };
 
 // --- DATA SAVING FUNCTIONS ---
@@ -165,15 +293,45 @@ export const deleteValue = async (valueId: string) => {
   }
 };
 
-export const saveGoal = async (userId: string, goal: Omit<Goal, 'id'>) => {
-  try {
-    const id = doc(collection(db, 'goals')).id;
-    await setDoc(doc(db, 'goals', id), { ...goal, userId });
-    return { id, ...goal } as Goal & { userId: string };
-  } catch (error) {
-    console.error('Error saving goal:', error);
-    throw error;
+export const saveGoal = async (userId: string, goal: Omit<Goal, 'id' | 'order'>, maxAttempts = 3) => {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.log(`[Firebase] Saving goal for user ${userId} (attempt ${attempt}/${maxAttempts}):`, goal);
+      
+      // Get the current max order to assign the next order
+      const goalsSnap = await getDocs(query(collection(db, 'goals'), where('userId', '==', userId)));
+      const maxOrder = goalsSnap.docs.reduce((max, doc) => {
+        const order = (doc.data() as any).order || 0;
+        return Math.max(max, order);
+      }, -1);
+      
+      const id = doc(collection(db, 'goals')).id;
+      const goalWithOrder = { ...goal, order: maxOrder + 1 };
+      
+      console.log('[Firebase] Saving goal with ID:', id, 'Order:', goalWithOrder.order);
+      
+      await setDoc(doc(db, 'goals', id), { ...goalWithOrder, userId });
+      
+      console.log('[Firebase] Goal saved successfully');
+      
+      return { id, ...goalWithOrder } as Goal & { userId: string };
+    } catch (error: any) {
+      console.warn(`[Firebase] Attempt ${attempt}/${maxAttempts} failed:`, error.message);
+      
+      // If this is the last attempt or error is not network-related, give up
+      if (attempt === maxAttempts || (error.code !== 'unavailable' && !error.message?.includes('offline'))) {
+        console.error('[Firebase] Error saving goal:', error);
+        throw error;
+      }
+      
+      // Wait before retrying (exponential backoff)
+      const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+      console.log(`[Firebase] Retrying in ${delayMs}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
   }
+  
+  throw new Error('Failed to save goal after all retries');
 };
 
 export const updateGoal = async (goalId: string, updates: Partial<Goal>) => {
@@ -281,11 +439,19 @@ export const deleteReview = async (reviewId: string) => {
   }
 };
 
-export const saveHabit = async (userId: string, habit: Omit<Habit, 'id'>) => {
+export const saveHabit = async (userId: string, habit: Omit<Habit, 'id' | 'order'>) => {
   try {
+    // Get the current max order to assign the next order
+    const habitsSnap = await getDocs(query(collection(db, 'habits'), where('userId', '==', userId)));
+    const maxOrder = habitsSnap.docs.reduce((max, doc) => {
+      const order = (doc.data() as any).order || 0;
+      return Math.max(max, order);
+    }, -1);
+    
     const id = doc(collection(db, 'habits')).id;
-    await setDoc(doc(db, 'habits', id), { ...habit, userId });
-    return { id, ...habit } as Habit & { userId: string };
+    const habitWithOrder = { ...habit, order: maxOrder + 1 };
+    await setDoc(doc(db, 'habits', id), { ...habitWithOrder, userId });
+    return { id, ...habitWithOrder } as Habit & { userId: string };
   } catch (error) {
     console.error('Error saving habit:', error);
     throw error;

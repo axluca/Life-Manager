@@ -16,6 +16,10 @@ const GoalModal: React.FC<GoalModalProps> = ({ values, goalToEdit, onClose, onSa
   const [description, setDescription] = useState('');
   const [identity, setIdentity] = useState('');
   const [selectedValueIds, setSelectedValueIds] = useState<string[]>([]);
+  const [nearTerm, setNearTerm] = useState('');
+  const [impactful, setImpactful] = useState('');
+  const [concrete, setConcrete] = useState('');
+  const [energizing, setEnergizing] = useState('');
   
   const isEditing = !!goalToEdit;
 
@@ -25,6 +29,10 @@ const GoalModal: React.FC<GoalModalProps> = ({ values, goalToEdit, onClose, onSa
       setDescription(goalToEdit.description);
       setIdentity(goalToEdit.identity);
       setSelectedValueIds(goalToEdit.valueIds);
+      setNearTerm('');
+      setImpactful('');
+      setConcrete('');
+      setEnergizing('');
     }
   }, [goalToEdit, isEditing]);
 
@@ -34,15 +42,25 @@ const GoalModal: React.FC<GoalModalProps> = ({ values, goalToEdit, onClose, onSa
     );
   };
 
+  const handleCloseModal = () => {
+    onClose();
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (title.trim() && description.trim()) {
-      const goalData = { title, description, identity, valueIds: selectedValueIds };
+      const goalData = { 
+        title: title.trim(), 
+        description: description.trim(), 
+        identity: identity.trim(), 
+        valueIds: selectedValueIds 
+      };
       if (isEditing) {
         onSaveGoal({ ...goalData, id: goalToEdit.id, order: goalToEdit.order });
       } else {
         onSaveGoal(goalData);
       }
+      handleCloseModal();
     }
   };
 
@@ -96,19 +114,19 @@ const GoalModal: React.FC<GoalModalProps> = ({ values, goalToEdit, onClose, onSa
             <div className="space-y-4">
                 <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300"><span className="font-bold text-indigo-600 dark:text-indigo-400">N</span>ear-term: What's a concrete first step?</label>
-                    <input type="text" placeholder="e.g., Sign up for a local class this week." className={`${inputStyle} mt-1`} />
+                    <input type="text" value={nearTerm} onChange={e => setNearTerm(e.target.value)} placeholder="e.g., Sign up for a local class this week." className={`${inputStyle} mt-1`} />
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300"><span className="font-bold text-indigo-600 dark:text-indigo-400">I</span>mpactful: Why does this matter to me?</label>
-                    <input type="text" placeholder="e.g., To connect with my partner's family." className={`${inputStyle} mt-1`} />
+                    <input type="text" value={impactful} onChange={e => setImpactful(e.target.value)} placeholder="e.g., To connect with my partner's family." className={`${inputStyle} mt-1`} />
                 </div>
                  <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300"><span className="font-bold text-indigo-600 dark:text-indigo-400">C</span>oncrete: What does 'done' look like?</label>
-                    <input type="text" placeholder="e.g., Hold a 30-minute conversation." className={`${inputStyle} mt-1`} />
+                    <input type="text" value={concrete} onChange={e => setConcrete(e.target.value)} placeholder="e.g., Hold a 30-minute conversation." className={`${inputStyle} mt-1`} />
                 </div>
                  <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300"><span className="font-bold text-indigo-600 dark:text-indigo-400">E</span>nergizing: What part of this excites me?</label>
-                    <input type="text" placeholder="e.g., The idea of travelling through South America." className={`${inputStyle} mt-1`} />
+                    <input type="text" value={energizing} onChange={e => setEnergizing(e.target.value)} placeholder="e.g., The idea of travelling through South America." className={`${inputStyle} mt-1`} />
                 </div>
             </div>
           </div>
