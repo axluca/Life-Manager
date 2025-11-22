@@ -275,7 +275,11 @@ export const fetchUserData = async (userId: string, maxAttempts = 3) => {
 export const saveValue = async (userId: string, value: Omit<Value, 'id'>) => {
   try {
     const id = doc(collection(db, 'values')).id;
-    await setDoc(doc(db, 'values', id), { ...value, userId });
+    // Remove undefined fields to avoid Firestore errors
+    const cleanValue = Object.fromEntries(
+      Object.entries({ ...value, userId }).filter(([_, v]) => v !== undefined)
+    );
+    await setDoc(doc(db, 'values', id), cleanValue);
     return { id, ...value } as Value & { userId: string };
   } catch (error) {
     console.error('Error saving value:', error);
@@ -318,7 +322,12 @@ export const saveGoal = async (userId: string, goal: Omit<Goal, 'id' | 'order'>,
       
       console.log('[Firebase] Saving goal with ID:', id, 'Order:', goalWithOrder.order);
       
-      await setDoc(doc(db, 'goals', id), { ...goalWithOrder, userId });
+      // Remove undefined fields to avoid Firestore errors
+      const cleanGoal = Object.fromEntries(
+        Object.entries({ ...goalWithOrder, userId }).filter(([_, value]) => value !== undefined)
+      );
+      
+      await setDoc(doc(db, 'goals', id), cleanGoal);
       
       console.log('[Firebase] Goal saved successfully');
       
@@ -363,7 +372,11 @@ export const deleteGoal = async (goalId: string) => {
 export const saveProject = async (userId: string, project: Omit<Project, 'id'>) => {
   try {
     const id = doc(collection(db, 'projects')).id;
-    await setDoc(doc(db, 'projects', id), { ...project, userId });
+    // Remove undefined fields to avoid Firestore errors
+    const cleanProject = Object.fromEntries(
+      Object.entries({ ...project, userId }).filter(([_, v]) => v !== undefined)
+    );
+    await setDoc(doc(db, 'projects', id), cleanProject);
     return { id, ...project } as Project & { userId: string };
   } catch (error) {
     console.error('Error saving project:', error);
@@ -392,7 +405,11 @@ export const deleteProject = async (projectId: string) => {
 export const saveTask = async (userId: string, task: Omit<Task, 'id'>) => {
   try {
     const id = doc(collection(db, 'tasks')).id;
-    await setDoc(doc(db, 'tasks', id), { ...task, userId });
+    // Remove undefined fields to avoid Firestore errors
+    const cleanTask = Object.fromEntries(
+      Object.entries({ ...task, userId }).filter(([_, v]) => v !== undefined)
+    );
+    await setDoc(doc(db, 'tasks', id), cleanTask);
     return { id, ...task } as Task & { userId: string };
   } catch (error) {
     console.error('Error saving task:', error);
@@ -421,7 +438,11 @@ export const deleteTask = async (taskId: string) => {
 export const saveReview = async (userId: string, review: Omit<Review, 'id'>) => {
   try {
     const id = doc(collection(db, 'reviews')).id;
-    await setDoc(doc(db, 'reviews', id), { ...review, userId });
+    // Remove undefined fields to avoid Firestore errors
+    const cleanReview = Object.fromEntries(
+      Object.entries({ ...review, userId }).filter(([_, v]) => v !== undefined)
+    );
+    await setDoc(doc(db, 'reviews', id), cleanReview);
     return { id, ...review } as Review & { userId: string };
   } catch (error) {
     console.error('Error saving review:', error);
@@ -458,7 +479,13 @@ export const saveHabit = async (userId: string, habit: Omit<Habit, 'id' | 'order
     
     const id = doc(collection(db, 'habits')).id;
     const habitWithOrder = { ...habit, order: maxOrder + 1 };
-    await setDoc(doc(db, 'habits', id), { ...habitWithOrder, userId });
+    
+    // Remove undefined fields to avoid Firestore errors
+    const cleanHabit = Object.fromEntries(
+      Object.entries({ ...habitWithOrder, userId }).filter(([_, value]) => value !== undefined)
+    );
+    
+    await setDoc(doc(db, 'habits', id), cleanHabit);
     return { id, ...habitWithOrder } as Habit & { userId: string };
   } catch (error) {
     console.error('Error saving habit:', error);
@@ -468,7 +495,12 @@ export const saveHabit = async (userId: string, habit: Omit<Habit, 'id' | 'order
 
 export const updateHabit = async (habitId: string, updates: Partial<Habit>) => {
   try {
-    await updateDoc(doc(db, 'habits', habitId), updates);
+    // Remove undefined fields to avoid Firestore errors
+    const cleanUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([_, value]) => value !== undefined)
+    );
+    
+    await updateDoc(doc(db, 'habits', habitId), cleanUpdates);
   } catch (error) {
     console.error('Error updating habit:', error);
     throw error;
@@ -487,7 +519,11 @@ export const deleteHabit = async (habitId: string) => {
 export const saveIdealWeekBlock = async (userId: string, block: Omit<IdealWeekBlock, 'id'>) => {
   try {
     const id = doc(collection(db, 'idealWeekBlocks')).id;
-    await setDoc(doc(db, 'idealWeekBlocks', id), { ...block, userId });
+    // Remove undefined fields to avoid Firestore errors
+    const cleanBlock = Object.fromEntries(
+      Object.entries({ ...block, userId }).filter(([_, v]) => v !== undefined)
+    );
+    await setDoc(doc(db, 'idealWeekBlocks', id), cleanBlock);
     return { id, ...block } as IdealWeekBlock & { userId: string };
   } catch (error) {
     console.error('Error saving ideal week block:', error);
