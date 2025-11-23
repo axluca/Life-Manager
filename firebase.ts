@@ -31,13 +31,13 @@ import {
 
 // Firebase configuration - loaded from environment variables
 const firebaseConfig = {
-  apiKey: "REDACTED_API_KEY",
-  authDomain: "life-manager-99518.firebaseapp.com",
-  projectId: "life-manager-99518",
-  storageBucket: "life-manager-99518.firebasestorage.app",
-  messagingSenderId: "213626612303",
-  appId: "1:213626612303:web:f4a52ad3f3cbb26b1d183a",
-  measurementId: "G-98J9BXF4RF",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
 // Initialize Firebase
