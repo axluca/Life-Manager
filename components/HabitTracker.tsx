@@ -53,7 +53,9 @@ const isDateTrackable = (checkDate: Date, habit: Habit): boolean => {
 };
 
 const calculateHabitStats = (habit: Habit) => {
-  const { completedDates, startDate, frequency, customFrequencyDays } = habit;
+  const { startDate, frequency, customFrequencyDays } = habit;
+  // Provide default empty array for completedDates if undefined
+  const completedDates = habit.completedDates || [];
   const total = completedDates.length;
   if (total === 0) {
     return { currentStreak: 0, total };
@@ -283,7 +285,15 @@ const HabitMonthCalendar: React.FC<{ habit: Habit, currentDate: Date, onToggleDa
 };
 
 
-const HabitTracker: React.FC<HabitTrackerProps> = ({ habit, onToggleDate, onEdit, onDelete }) => {
+const HabitTracker: React.FC<HabitTrackerProps> = ({ habit: rawHabit, onToggleDate, onEdit, onDelete }) => {
+  // Normalize habit data to ensure all required fields have default values
+  const habit = useMemo(() => ({
+    ...rawHabit,
+    completedDates: rawHabit.completedDates || [],
+    weeklyDays: rawHabit.weeklyDays || [],
+    customFrequencyDays: rawHabit.customFrequencyDays || undefined,
+  }), [rawHabit]);
+
   const [currentDate, setCurrentDate] = useState(new Date());
   
   const today = useMemo(() => new Date(), []);
